@@ -7,3 +7,4 @@ results/
 .omc/
 .playwright-mcp/
 *.png
+!screenshots/*.png
