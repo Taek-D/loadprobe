@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.git/
+.omc/
+.claude/
+data/
+*.md
+!pyproject.toml
+report/
+tests/

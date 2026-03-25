@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoadProbe Report{% if label %} — {{ label }}{% endif %}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --pass: #22c55e; --pass-bg: #dcfce7;
+    --warn: #eab308; --warn-bg: #fef9c3;
+    --fail: #ef4444; --fail-bg: #fee2e2;
+    --crit: #dc2626; --crit-bg: #fee2e2;
+    --bg: #f8fafc; --card: #fff; --border: #e2e8f0;
+    --text: #1e293b; --muted: #64748b;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+         background:var(--bg); color:var(--text); line-height:1.6; }
+  .container { max-width:1100px; margin:0 auto; padding:24px 16px; }
+  header { text-align:center; margin-bottom:32px; }
+  header h1 { font-size:1.8rem; font-weight:700; }
+  header .meta { color:var(--muted); font-size:0.9rem; margin-top:4px; }
+  .label-badge { display:inline-block; padding:4px 16px; border-radius:20px;
+                 font-weight:600; font-size:0.85rem; margin-top:8px; text-transform:uppercase; }
+  .label-badge.before { background:#dbeafe; color:#1d4ed8; }
+  .label-badge.after  { background:#d1fae5; color:#059669; }
+  .label-badge.default { background:#f1f5f9; color:#475569; }
+
+  .verdict-banner { text-align:center; padding:20px; border-radius:12px;
+                    margin-bottom:24px; font-size:1.4rem; font-weight:700; }
+  .verdict-banner.PASS { background:var(--pass-bg); color:#15803d; }
+  .verdict-banner.WARNING { background:var(--warn-bg); color:#a16207; }
+  .verdict-banner.FAIL { background:var(--fail-bg); color:#b91c1c; }
+
+  .card { background:var(--card); border:1px solid var(--border);
+          border-radius:12px; padding:24px; margin-bottom:24px; }
+  .card h2 { font-size:1.15rem; margin-bottom:16px; }
+
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); }
+  th { font-weight:600; font-size:0.85rem; text-transform:uppercase;
+       color:var(--muted); letter-spacing:0.5px; }
+  td { font-size:0.95rem; }
+  .badge { display:inline-block; padding:3px 12px; border-radius:12px;
+           font-weight:600; font-size:0.8rem; }
+  .badge.PASS { background:var(--pass-bg); color:#15803d; }
+  .badge.WARNING { background:var(--warn-bg); color:#a16207; }
+  .badge.FAIL { background:var(--fail-bg); color:#b91c1c; }
+  .badge.CRITICAL { background:var(--crit-bg); color:#b91c1c; }
+
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+                gap:12px; margin-bottom:24px; }
+  .stat-box { background:var(--bg); border-radius:8px; padding:14px; text-align:center; }
+  .stat-box .value { font-size:1.5rem; font-weight:700; }
+  .stat-box .label { font-size:0.78rem; color:var(--muted); text-transform:uppercase; }
+
+  .chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  .chart-card { background:var(--card); border:1px solid var(--border);
+                border-radius:12px; padding:20px; }
+  .chart-card h3 { font-size:0.95rem; margin-bottom:12px; }
+  canvas { width:100%!important; height:260px!important; }
+
+  @media(max-width:768px) { .chart-grid { grid-template-columns:1fr; } }
+  footer { text-align:center; color:var(--muted); font-size:0.8rem; margin-top:32px; padding:16px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <h1>LoadProbe Performance Report</h1>
+    <div class="meta">Generated: {{ generated_at }}</div>
+    {% if label %}
+    <span class="label-badge {{ label if label in ['before','after'] else 'default' }}">{{ label }}</span>
+    {% endif %}
+  </header>
+
+  <!-- Overall Verdict -->
+  <div class="verdict-banner {{ overall_verdict }}">
+    Overall SLA Verdict: {{ overall_verdict }}
+  </div>
+
+  <!-- SLA Judgment Table -->
+  <div class="card">
+    <h2>SLA Judgment</h2>
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>Value</th><th>Threshold</th><th>Verdict</th></tr>
+      </thead>
+      <tbody>
+        {% for r in sla_results %}
+        <tr>
+          <td>{{ r.metric }}</td>
+          <td><strong>{{ r.value }} {{ r.unit }}</strong></td>
+          <td style="font-size:0.82rem;color:var(--muted)">{{ r.threshold_info }}</td>
+          <td><span class="badge {{ r.verdict }}">{{ r.verdict }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="card">
+    <h2>Test Summary</h2>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="value">{{ "{:,}".format(stats.total_requests) }}</div>
+        <div class="label">Total Requests</div>
+      </div>
+      <div class="stat-box">
+        <div class="value">{{ "%.1f"|format(stats.rps) }}</div>
+        <div class="label">Requests/s</div>
+      </div>
+      <div class="stat-box">
+        <div class="value">{{ "%.1f"|format(stats.avg_response_ms) }} ms</div>
+        <div class="label">Avg Response</div>
+      </div>
+      <div class="stat-box">
+        <div class="value">{{ "%.2f"|format(stats.error_rate) }}%</div>
+        <div class="label">Error Rate</div>
+      </div>
+      {% if system %}
+      <div class="stat-box">
+        <div class="value">{{ "%.1f"|format(system.avg_cpu) }}%</div>
+        <div class="label">Avg CPU</div>
+      </div>
+      <div class="stat-box">
+        <div class="value">{{ "%.1f"|format(system.max_cpu) }}%</div>
+        <div class="label">Max CPU</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="chart-grid">
+
+    <!-- Response Time Distribution -->
+    <div class="chart-card">
+      <h3>Response Time Percentiles</h3>
+      <canvas id="pctChart"></canvas>
+    </div>
+
+    <!-- TPS Trend -->
+    <div class="chart-card">
+      <h3>Throughput (Requests/s)</h3>
+      <canvas id="rpsChart"></canvas>
+    </div>
+
+    {% if system %}
+    <!-- CPU Trend -->
+    <div class="chart-card">
+      <h3>Server CPU Usage (%)</h3>
+      <canvas id="cpuChart"></canvas>
+    </div>
+
+    <!-- Memory Trend -->
+    <div class="chart-card">
+      <h3>Server Memory Usage (%)</h3>
+      <canvas id="memChart"></canvas>
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+
+<footer>LoadProbe &mdash; Performance Load Testing Automation</footer>
+
+<script>
+const history = {{ history_json }};
+const system  = {{ system_json }};
+
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+  scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } } },
+};
+
+/* Percentile bar chart */
+{
+  const pctLabels = ['p50','p66','p75','p80','p90','p95','p98','p99'];
+  const pctValues = [
+    {{ stats.p50 }}, {{ stats.p66 }}, {{ stats.p75 }}, {{ stats.p80 }},
+    {{ stats.p90 }}, {{ stats.p95 }}, {{ stats.p98 }}, {{ stats.p99 }}
+  ];
+  new Chart(document.getElementById('pctChart'), {
+    type: 'bar',
+    data: {
+      labels: pctLabels,
+      datasets: [{
+        label: 'Response Time (ms)',
+        data: pctValues,
+        backgroundColor: pctValues.map(v => v > 5000 ? '#ef4444' : v > 3000 ? '#eab308' : '#22c55e'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      plugins: { ...chartDefaults.plugins,
+        annotation: {},
+        legend: { display: false },
+      },
+      scales: {
+        ...chartDefaults.scales,
+        y: { title: { display: true, text: 'ms' } }
+      }
+    }
+  });
+}
+
+/* TPS trend */
+if (history) {
+  new Chart(document.getElementById('rpsChart'), {
+    type: 'line',
+    data: {
+      labels: history.timestamps,
+      datasets: [
+        { label: 'RPS', data: history.rps, borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.3, pointRadius: 0 },
+        { label: 'Users', data: history.user_counts, borderColor: '#a855f7',
+          borderDash: [4,4], tension: 0.3, pointRadius: 0, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      ...chartDefaults,
+      scales: {
+        ...chartDefaults.scales,
+        y:  { title: { display: true, text: 'req/s' }, position: 'left' },
+        y1: { title: { display: true, text: 'Users' }, position: 'right', grid: { drawOnChartArea: false } },
+      }
+    }
+  });
+} else {
+  document.getElementById('rpsChart').parentElement.innerHTML += '<p style="color:#94a3b8;text-align:center">No history data available</p>';
+}
+
+/* CPU chart */
+if (system && document.getElementById('cpuChart')) {
+  const cpuLabels = system.timestamps.filter((_, i) => i % 5 === 0 || i === system.timestamps.length - 1);
+  new Chart(document.getElementById('cpuChart'), {
+    type: 'line',
+    data: {
+      labels: system.timestamps,
+      datasets: [{
+        label: 'CPU %', data: system.cpu, borderColor: '#f97316',
+        backgroundColor: 'rgba(249,115,22,0.1)', fill: true, tension: 0.3, pointRadius: 0,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      scales: {
+        ...chartDefaults.scales,
+        y: { title: { display: true, text: '%' }, min: 0,
+             suggestedMax: Math.max(80, ...system.cpu) },
+      },
+      plugins: { ...chartDefaults.plugins,
+        annotation: { annotations: {
+          slaLine: { type: 'line', yMin: 70, yMax: 70, borderColor: '#ef4444',
+                     borderWidth: 2, borderDash: [6,4], label: { display: true, content: 'SLA 70%', position: 'end' } }
+        }}
+      }
+    }
+  });
+}
+
+/* Memory chart */
+if (system && document.getElementById('memChart')) {
+  new Chart(document.getElementById('memChart'), {
+    type: 'line',
+    data: {
+      labels: system.timestamps,
+      datasets: [{
+        label: 'Memory %', data: system.memory, borderColor: '#8b5cf6',
+        backgroundColor: 'rgba(139,92,246,0.1)', fill: true, tension: 0.3, pointRadius: 0,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      scales: {
+        ...chartDefaults.scales,
+        y: { title: { display: true, text: '%' }, min: 0,
+             suggestedMax: Math.max(95, ...system.memory) },
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>

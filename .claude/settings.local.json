@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff format --quiet $CLAUDE_FILE_PATH 2>/dev/null; ruff check --fix --quiet $CLAUDE_FILE_PATH 2>/dev/null; true"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(uv pip install:*)",
+      "Bash(uv pip install -r:*)",
+      "Bash(uv run:*)",
+      "Bash(uv venv:*)",
+      "Bash(uv pip list:*)",
+      "Bash(uv pip show:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(docker compose build:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose down:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python -c:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(docker system prune -a)"
+    ]
+  }
+}
